@@ -18,6 +18,7 @@ class ProductProvider with ChangeNotifier {
   bool _isLoading = false;
   bool _isLoadingMore = false;
   String _searchQuery = '';
+  String? _errorMessage;
   
   int _currentPage = 0;
   final int _itemsPerPage = 10;
@@ -28,6 +29,44 @@ class ProductProvider with ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
   String get searchQuery => _searchQuery;
+  String? get errorMessage => _errorMessage;
+
+  // Centralized error handling method
+  void _handleError(dynamic error, [StackTrace? stackTrace]) {
+    String message;
+    
+    if (error is SocketException) {
+      message = 'No internet connection. Please check your network.';
+    } else if (error is TimeoutException) {
+      message = 'Request timeout. Please try again.';
+    } else if (error is FormatException) {
+      message = 'Invalid data format received.';
+    } else if (error is FileSystemException) {
+      message = 'File system error: ${error.message}';
+    } else if (error.toString().contains('Permission')) {
+      message = 'Permission denied. Please grant necessary permissions.';
+    } else if (error.toString().contains('Storage')) {
+      message = 'Storage error. Please check available space.';
+    } else {
+      message = 'An error occurred: ${error.toString()}';
+    }
+    
+    _errorMessage = message;
+    
+    // Log error for debugging
+    debugPrint('Error in ProductProvider: $message');
+    if (stackTrace != null) {
+      debugPrint('Stack trace: $stackTrace');
+    }
+    
+    notifyListeners();
+  }
+
+  // Clear error message
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
 
   Future<void> fetchProducts() async {
     _isLoading = true;
@@ -35,14 +74,15 @@ class ProductProvider with ChangeNotifier {
     _displayedProducts.clear();
     _filteredProducts.clear();
     _hasMore = true;
+    clearError();
     notifyListeners();
 
     try {
       _allProducts = await _apiService.getProducts();
       _applyFilters();
       _loadPage();
-    } catch (e) {
-      // Handle error
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -159,39 +199,42 @@ class ProductProvider with ChangeNotifier {
 
   Future<bool> addProduct(Product product) async {
     try {
+      clearError();
       final success = await _apiService.createProduct(product);
       if (success) {
         await fetchProducts();
         return true;
       }
-    } catch (e) {
-      // Handle error
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace);
     }
     return false;
   }
 
   Future<bool> updateProduct(int id, Product product) async {
     try {
+      clearError();
       final success = await _apiService.updateProduct(id, product);
       if (success) {
         await fetchProducts();
         return true;
       }
-    } catch (e) {
-      // Handle error
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace);
     }
     return false;
   }
 
   Future<bool> deleteProduct(int id) async {
     try {
+      clearError();
       final success = await _apiService.deleteProduct(id);
       if (success) {
         await fetchProducts();
         return true;
       }
-    } catch (e) {
-      // Handle error
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace);
     }
     return false;
   }
@@ -220,7 +263,7 @@ class ProductProvider with ChangeNotifier {
           return downloadsPath.path;
         }
       } catch (e) {
-        // Handle error
+        debugPrint('Error getting downloads directory: $e');
       }
     }
     
@@ -258,12 +301,14 @@ class ProductProvider with ChangeNotifier {
       
       return status.isGranted;
     } catch (e) {
+      debugPrint('Error requesting storage permission: $e');
       return true;
     }
   }
 
   Future<String> exportToCSV() async {
     try {
+      clearError();
       final hasPermission = await _requestStoragePermission();
       if (!hasPermission) {
         throw Exception('Storage permission denied');
@@ -284,13 +329,15 @@ class ProductProvider with ChangeNotifier {
       await file.writeAsString(csv);
       
       return path;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace);
       rethrow;
     }
   }
 
   Future<String> exportToPDF() async {
     try {
+      clearError();
       final hasPermission = await _requestStoragePermission();
       if (!hasPermission) {
         throw Exception('Storage permission denied');
@@ -375,6 +422,7 @@ class ProductProvider with ChangeNotifier {
       
       return path;
     } catch (e, stackTrace) {
+      _handleError(e, stackTrace);
       rethrow;
     }
   }
