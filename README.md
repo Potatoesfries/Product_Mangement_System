@@ -133,10 +133,3 @@ flutter run
 
 ---
 
-## 📝 License
-
-MIT License
-
----
-
-**Made with ❤️**
